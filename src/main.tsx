@@ -5,12 +5,10 @@ import CharacterSelectionEnhancer from './CharacterSelection';
 import './styles.css';
 import './character-selection.css';
 import './operator-stage.css';
+import './atlas.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <>
-      <App />
-      <CharacterSelectionEnhancer />
-    </>
+    <><App /><CharacterSelectionEnhancer /></>
   </React.StrictMode>,
 );
