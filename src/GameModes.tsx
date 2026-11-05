@@ -24,8 +24,8 @@ const guns = [{ name: 'SIDEKICK', mag: 12, damage: 35, rate: 0.26 }, { name: 'VE
 const positions: [number, number, number][] = [[-9, 0, -16], [-4.5, 0, -20], [0, 0, -17], [4.5, 0, -21], [9, 0, -16]];
 const makeUnits = (mode: Mode): Unit[] => {
   const randomAgent = () => Math.floor(Math.random() * agents.length);
-  if (mode === 'practice') return Array.from({ length: 6 }, (_, id) => ({ id, team: 'target', agent: id % agents.length, hp: 100, alive: true, spawn: positions[id % positions.length], nextShot: 0, nextAbility: 0 }));
-  if (mode === 'skirmish') return Array.from({ length: 3 }, (_, id) => ({ id, team: 'red', agent: randomAgent(), hp: 100, alive: true, spawn: [((id - 1) * 5), 0, -15 - (id % 2) * 4] as [number, number, number], nextShot: 0, nextAbility: 0 }));
+  if (mode === 'practice') return Array.from({ length: 6 }, (_, id) => ({ id, team: 'target' as const, agent: id % agents.length, hp: 100, alive: true, spawn: positions[id % positions.length], nextShot: 0, nextAbility: 0 }));
+  if (mode === 'skirmish') return Array.from({ length: 3 }, (_, id) => ({ id, team: 'red' as const, agent: randomAgent(), hp: 100, alive: true, spawn: [((id - 1) * 5), 0, -15 - (id % 2) * 4] as [number, number, number], nextShot: 0, nextAbility: 0 }));
   const allies = Array.from({ length: 4 }, (_, id) => ({ id, team: 'blue' as const, agent: randomAgent(), hp: 100, alive: true, spawn: [-8 + id * 2.7, 0, 7] as [number, number, number], nextShot: 0, nextAbility: 0 }));
   const enemies = Array.from({ length: 5 }, (_, id) => ({ id: id + 4, team: 'red' as const, agent: randomAgent(), hp: 100, alive: true, spawn: positions[id], nextShot: 0, nextAbility: 0 }));
   return [...allies, ...enemies];
@@ -47,13 +47,16 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
   const unitRefs = useRef<(THREE.Group | null)[]>([]);
   const obstacles = useMemo(() => [new THREE.Box3(new THREE.Vector3(-3.2, 0, -10.5), new THREE.Vector3(-1.3, 3.5, -7.5)), new THREE.Box3(new THREE.Vector3(2.4, 0, -17), new THREE.Vector3(5.2, 2.4, -14.2)), new THREE.Box3(new THREE.Vector3(-10, 0, -20), new THREE.Vector3(-7.3, 3, -17)), new THREE.Box3(new THREE.Vector3(7, 0, -8), new THREE.Vector3(10, 3, -5))], []);
   const [units, setUnits] = useState<Unit[]>(() => makeUnits(mode));
-  const [ammo, setAmmo] = useState(guns[weaponIndex].mag);
+  const unitsRef = useRef(units);
   const [hit, setHit] = useState(false);
   const input = useRef<Record<string, boolean>>({});
   const player = useRef({ hp: 100, alive: true, ammo: guns[weaponIndex].mag, reserve: guns[weaponIndex].mag * 3, lastShot: 0, lastDamage: 0, lastAbility: 0, ult: 100, kills: 0, reload: false, ended: false, move: new THREE.Vector3() });
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const difficultyConfig = { Easy: { aim: 0.24, interval: 2.0, speed: 1.15 }, Standard: { aim: 0.46, interval: 1.35, speed: 1.5 }, Hard: { aim: 0.68, interval: 0.88, speed: 1.8 } }[difficulty];
   const isPractice = mode === 'practice';
+  const changeUnits = useCallback((update: (previous: Unit[]) => Unit[]) => {
+    setUnits(previous => { const next = update(previous); unitsRef.current = next; return next; });
+  }, []);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => { input.current[e.code] = true; if (e.code === 'Space') e.preventDefault(); };
@@ -63,18 +66,26 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
       const p = player.current; const now = performance.now() / 1000; const gun = guns[weaponIndex];
       if (p.reload || (!isPractice && p.ammo <= 0) || now - p.lastShot < gun.rate) return;
       p.lastShot = now;
-      if (!isPractice) { p.ammo--; setAmmo(p.ammo); }
+      if (!isPractice) p.ammo--;
       camera.updateMatrixWorld(); raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-      const candidates = unitRefs.current.filter((unit, i) => unit && units[i]?.alive && (isPractice || units[i]?.team === 'red')) as THREE.Group[];
+      const currentUnits = unitsRef.current;
+      const candidates = unitRefs.current.filter((unit, i) => unit && currentUnits[i]?.alive && (isPractice || currentUnits[i]?.team === 'red')) as THREE.Group[];
       const result = raycaster.intersectObjects(candidates, true)[0];
       if (result) {
         let parent: THREE.Object3D | null = result.object;
         while (parent && parent.userData.unitId === undefined) parent = parent.parent;
         const id = parent?.userData.unitId as number | undefined;
-        if (id !== undefined) setUnits(previous => previous.map(unit => {
+        if (id !== undefined) changeUnits(previous => previous.map(unit => {
           if (unit.id !== id || !unit.alive) return unit;
           const hp = unit.hp - gun.damage;
-          if (hp <= 0) { p.kills++; onMessage(isPractice ? 'TARGET HIT // +1' : `${agents[unit.agent].name} DOWN`); return { ...unit, hp: 0, alive: false }; }
+          if (hp <= 0) {
+            p.kills++;
+            if (isPractice) {
+              window.setTimeout(() => changeUnits(current => current.map(target => target.id === id ? { ...target, hp: 100, alive: true } : target)), 700);
+              onMessage('TARGET HIT // +1');
+            } else onMessage(`${agents[unit.agent].name} DOWN`);
+            return { ...unit, hp: 0, alive: false };
+          }
           onMessage('HIT CONFIRMED'); return { ...unit, hp };
         }));
         setHit(true); window.setTimeout(() => setHit(false), 120);
@@ -83,12 +94,12 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
     };
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('mousedown', fire);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('mousedown', fire); };
-  }, [camera, isPractice, onMessage, onStats, raycaster, units, weaponIndex]);
+  }, [camera, changeUnits, isPractice, onMessage, onStats, raycaster, weaponIndex]);
 
   useEffect(() => {
     const p = player.current;
     p.hp = 100; p.alive = true; p.ammo = guns[weaponIndex].mag; p.reserve = guns[weaponIndex].mag * 3; p.ult = 100; p.kills = 0; p.reload = false; p.ended = false;
-    setAmmo(p.ammo); setUnits(makeUnits(mode)); camera.position.set(0, 1.65, 10);
+    const nextUnits = makeUnits(mode); unitsRef.current = nextUnits; setUnits(nextUnits); camera.position.set(0, 1.65, 10);
     onStats({ hp: 100, ammo: isPractice ? Infinity : p.ammo, kills: 0, blue: mode === 'team' ? 5 : 1, red: mode === 'practice' ? 6 : mode === 'skirmish' ? 3 : 5, message: '', ultimate: 100 });
   }, [resetKey, mode, camera, weaponIndex, isPractice, onStats]);
 
@@ -105,27 +116,27 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
         camera.position.x = THREE.MathUtils.clamp(camera.position.x, -14, 14); camera.position.z = THREE.MathUtils.clamp(camera.position.z, -26, 13);
       }
       if (k.KeyR && !isPractice && !p.reload && p.ammo < guns[weaponIndex].mag) {
-        p.reload = true; onMessage('RELOADING'); window.setTimeout(() => { p.ammo = guns[weaponIndex].mag; setAmmo(p.ammo); p.reload = false; }, 900);
+        p.reload = true; onMessage('RELOADING'); window.setTimeout(() => { p.ammo = guns[weaponIndex].mag; setUnits(current => current); p.reload = false; }, 900);
       }
       if (k.KeyE && now - p.lastAbility > 0.35) {
         p.lastAbility = now;
         if (agent.role === 'MOBILITY') controls.current.moveForward(-3.5);
         else if (agent.role === 'SUPPORT') p.hp = Math.min(100, p.hp + 35);
-        else if (agent.role === 'SENTINEL' || agent.role === 'DUELIST') setUnits(previous => previous.map(unit => unit.team === 'red' && unit.alive ? { ...unit, hp: Math.max(0, unit.hp - 22), alive: unit.hp - 22 > 0 } : unit));
+        else if (agent.role === 'SENTINEL' || agent.role === 'DUELIST') changeUnits(previous => previous.map(unit => unit.team === 'red' && unit.alive ? { ...unit, hp: Math.max(0, unit.hp - 22), alive: unit.hp - 22 > 0 } : unit));
         else camera.position.z -= 2.5;
         onMessage(`${agent.name} // SIGNATURE`);
       }
       if (k.KeyX && (isPractice || p.ult >= 100) && now - p.lastAbility > 0.35) {
         p.lastAbility = now; if (!isPractice) p.ult = 0; p.hp = Math.min(100, p.hp + 45);
         if (agent.role === 'MOBILITY') controls.current.moveForward(-6);
-        else if (agent.role === 'SENTINEL' || agent.role === 'DUELIST') setUnits(previous => previous.map(unit => unit.team === 'red' && unit.alive ? { ...unit, hp: Math.max(0, unit.hp - 45), alive: unit.hp - 45 > 0 } : unit));
+        else if (agent.role === 'SENTINEL' || agent.role === 'DUELIST') changeUnits(previous => previous.map(unit => unit.team === 'red' && unit.alive ? { ...unit, hp: Math.max(0, unit.hp - 45), alive: unit.hp - 45 > 0 } : unit));
         onMessage(isPractice ? 'UNLIMITED ULTIMATE // READY' : `${agent.name} // ULTIMATE`);
       }
     }
     p.ult = isPractice ? 100 : Math.min(100, p.ult + dt * 2.6);
 
-    const liveUnits = units.filter(unit => unit.alive && unit.team !== 'target');
-    units.forEach((unit, index) => {
+    const currentUnits = unitsRef.current;
+    currentUnits.forEach((unit, index) => {
       const group = unitRefs.current[index]; if (!group || !unit.alive) return;
       if (unit.team === 'target') {
         group.position.x = unit.spawn[0] + Math.sin(now * (0.55 + unit.id * 0.06)) * 1.5;
@@ -133,47 +144,41 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
         return;
       }
       const isAlly = mode === 'team' && unit.team === 'blue';
-      const targets = isAlly ? liveUnits.filter(other => other.team === 'red') : liveUnits.filter(other => other.team === 'blue');
-      let targetUnit: Unit | undefined;
-      let best = Infinity;
-      for (const candidate of targets) {
-        const ref = unitRefs.current[units.findIndex(other => other.id === candidate.id)];
-        if (!ref) continue;
-        const dist = group.position.distanceTo(ref.position);
-        if (dist < best) { best = dist; targetUnit = candidate; }
+      const possibleTargets = currentUnits.filter(other => other.alive && (isAlly ? other.team === 'red' : isAlly ? other.team === 'red' : mode === 'team' ? other.team === 'blue' : false));
+      let targetGroup: THREE.Group | null = null; let targetUnit: Unit | undefined; let nearest = Infinity;
+      for (const candidate of possibleTargets) {
+        const candidateIndex = currentUnits.findIndex(other => other.id === candidate.id);
+        const ref = unitRefs.current[candidateIndex]; if (!ref) continue;
+        const distance = group.position.distanceTo(ref.position);
+        if (distance < nearest) { nearest = distance; targetGroup = ref; targetUnit = candidate; }
       }
-      const targetRef = targetUnit ? unitRefs.current[units.findIndex(other => other.id === targetUnit!.id)] : null;
-      if (!isPractice && targetRef) {
-        if (best > 6.2) {
-          const direction = targetRef.position.clone().sub(group.position); direction.y = 0; direction.normalize();
-          group.position.addScaledVector(direction, difficultyConfig.speed * dt); group.rotation.y = Math.atan2(direction.x, direction.z);
+      // In solo mode bots pursue and attack the player directly; in team mode they fight the opposing squad.
+      if (!isAlly && mode === 'skirmish') {
+        const playerPosition = new THREE.Vector3(camera.position.x, 0, camera.position.z);
+        const distance = group.position.distanceTo(playerPosition);
+        if (distance > 6) { const direction = playerPosition.sub(group.position).normalize(); group.position.addScaledVector(direction, difficultyConfig.speed * dt); group.rotation.y = Math.atan2(direction.x, direction.z); }
+        if (distance < 19 && now > unit.nextShot) {
+          unit.nextShot = now + difficultyConfig.interval * (0.75 + Math.random() * 0.5);
+          if (Math.random() < difficultyConfig.aim) { p.hp = Math.max(0, p.hp - 10); onStats({ hp: p.hp }); }
         }
-        if (best < 19 && now > unit.nextShot) {
-          const updatedUnit = units.find(entry => entry.id === unit.id);
-          if (updatedUnit && updatedUnit.nextShot <= now) {
-            updatedUnit.nextShot = now + difficultyConfig.interval * (0.75 + Math.random() * 0.5);
-            if (Math.random() < difficultyConfig.aim) {
-              if (isAlly) setUnits(previous => previous.map(entry => entry.id === targetUnit!.id ? { ...entry, hp: entry.hp - 18, alive: entry.hp - 18 > 0 } : entry));
-              else if (mode === 'team') {
-                // Enemies choose the closest live blue unit; occasionally pressure the player.
-                if (Math.random() < 0.65) { p.hp = Math.max(0, p.hp - 9); onStats({ hp: p.hp }); }
-                else setUnits(previous => previous.map(entry => entry.team === 'blue' && entry.id !== 0 ? { ...entry, hp: entry.hp - 12, alive: entry.hp - 12 > 0 } : entry));
-              } else { p.hp = Math.max(0, p.hp - 10); onStats({ hp: p.hp }); }
-            }
-          }
+      } else if (targetGroup && targetUnit) {
+        if (nearest > 6.2) { const direction = targetGroup.position.clone().sub(group.position); direction.y = 0; direction.normalize(); group.position.addScaledVector(direction, difficultyConfig.speed * dt); group.rotation.y = Math.atan2(direction.x, direction.z); }
+        if (nearest < 19 && now > unit.nextShot) {
+          unit.nextShot = now + difficultyConfig.interval * (0.75 + Math.random() * 0.5);
+          if (Math.random() < difficultyConfig.aim) changeUnits(previous => previous.map(entry => entry.id === targetUnit!.id ? { ...entry, hp: entry.hp - (isAlly ? 18 : 12), alive: entry.hp - (isAlly ? 18 : 12) > 0 } : entry));
         }
-        if (unit.agent === 1 && unit.hp < 60 && now > unit.nextAbility) {
-          unit.nextAbility = now + 8; setUnits(previous => previous.map(entry => entry.id === unit.id ? { ...entry, hp: Math.min(100, entry.hp + 25) } : entry));
-        }
+      }
+      if (unit.agent === 1 && unit.hp < 60 && now > unit.nextAbility) {
+        unit.nextAbility = now + 8; changeUnits(previous => previous.map(entry => entry.id === unit.id ? { ...entry, hp: Math.min(100, entry.hp + 25) } : entry));
       }
     });
 
-    const enemiesLeft = units.filter(unit => unit.team === 'red' && unit.alive).length;
-    const alliesLeft = units.filter(unit => unit.team === 'blue' && unit.alive).length + 1;
+    const enemiesLeft = currentUnits.filter(unit => unit.team === 'red' && unit.alive).length;
+    const alliesLeft = currentUnits.filter(unit => unit.team === 'blue' && unit.alive).length + 1;
     if (!isPractice && !p.ended && enemiesLeft === 0) { p.ended = true; onMessage('VICTORY // SITE SECURED'); onEnd(true); }
     if (mode === 'team' && !p.ended && alliesLeft === 0) { p.ended = true; onMessage('DEFEAT // SQUAD ELIMINATED'); onEnd(false); }
-    if (!p.alive && !p.ended) { p.ended = true; onEnd(false); }
-    onStats({ hp: p.hp, ammo: isPractice ? Infinity : p.ammo, kills: p.kills, blue: mode === 'team' ? alliesLeft : 1, red: isPractice ? units.filter(unit => unit.alive).length : enemiesLeft, ultimate: p.ult });
+    if (p.hp <= 0 && !p.ended) { p.alive = false; p.ended = true; onMessage('OPERATOR DOWN'); onEnd(false); }
+    onStats({ hp: p.hp, ammo: isPractice ? Infinity : p.ammo, kills: p.kills, blue: mode === 'team' ? alliesLeft : 1, red: isPractice ? currentUnits.filter(unit => unit.alive).length : enemiesLeft, ultimate: p.ult });
   });
 
   return <>
@@ -191,7 +196,6 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
       <mesh position={[0, 0.04, -0.36]}><cylinderGeometry args={[0.055, 0.055, 0.36, 12]} rotation={[Math.PI / 2, 0, 0]} /><meshStandardMaterial color="#111619" /></mesh>
       <mesh position={[0, 0.11, 0.05]}><boxGeometry args={[0.055, 0.035, 0.16]} /><meshBasicMaterial color={agent.color} /></mesh>
     </group>
-    {hit && <mesh position={[camera.position.x, camera.position.y, camera.position.z - 1]}><sphereGeometry args={[0.01]} /><meshBasicMaterial color="#fff" /></mesh>}
   </>;
 }
 
@@ -222,7 +226,7 @@ export default function GameModes() {
 
   return <main className="mode-game"><Canvas shadows dpr={[1, 1.5]} camera={{ fov: 75, near: 0.1, far: 100 }}><Arena key={`${mode}-${resetKey}`} mode={mode || 'skirmish'} agent={agent} difficulty={difficulty} weaponIndex={weaponIndex} resetKey={resetKey} onStats={updateStats} onEnd={end} onMessage={showMessage} /></Canvas>
     <div className="mode-hud"><header><b><i>Z</i> ZZAP <small>// {modes.find(item => item.id === mode)?.title}</small></b><span>BLUE {stats.blue} <i /> RED {stats.red}</span><button onClick={() => setPage('lobby')}>EXIT</button></header>
-      <div className="mode-site">◈ TRAINING SITE <small>— {agent.name} / {agent.role}</small></div><div className="mode-crosshair"><i/><i/><i/><i/>{hit && <b>×</b>}</div><div className="mode-notice">{stats.message}</div>
+      <div className="mode-site">◈ TRAINING SITE <small>— {agent.name} / {agent.role}</small></div><div className="mode-crosshair"><i/><i/><i/><i/></div><div className="mode-notice">{stats.message}</div>
       <div className="mode-bottom"><div className="mode-vitals"><small>VITALS</small><b>{Math.ceil(stats.hp)}</b><i><span style={{ width: `${stats.hp}%` }} /></i></div><div className="mode-ability"><b>E <small>SIGNATURE</small></b><b className={mode === 'practice' || stats.ultimate >= 100 ? 'ready' : ''}>X <small>{mode === 'practice' ? 'ULT ∞' : `ULT ${Math.floor(stats.ultimate)}%`}</small></b></div><div className="mode-ammo"><small>{guns[weaponIndex].name}</small><b>{mode === 'practice' ? '∞' : stats.ammo}</b><button onClick={() => setWeaponIndex(index => (index + 1) % guns.length)}>CHANGE [1]</button></div></div>
       <div className="mode-lock-hint">CLICK GAME TO LOCK MOUSE · WASD MOVE · LMB FIRE · E SKILL · X ULTIMATE · R RELOAD</div>
     </div>
