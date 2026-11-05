@@ -1,16 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import OperatorModel, { type OperatorLook } from './OperatorModel';
 
-type Character = {
-  name: string;
-  role: string;
-  color: string;
-  sigil: string;
-  skill: string;
-  ultimate: string;
-};
-
+type Character = OperatorLook & { skill: string; ultimate: string };
 const characters: Character[] = [
   { name: 'KITE', role: 'MOBILITY', color: '#55d6c2', sigil: '↗', skill: 'Slipstream — 짧은 돌진으로 위치를 바꿉니다.', ultimate: 'JETSTREAM — 이동 속도와 연사 안정성 증가.' },
   { name: 'MORROW', role: 'SUPPORT', color: '#bd8dff', sigil: '✳', skill: 'Afterglow — 자신을 회복합니다.', ultimate: 'SECOND DAWN — 체력과 탄약을 완전히 회복합니다.' },
@@ -18,38 +11,6 @@ const characters: Character[] = [
   { name: 'VEX', role: 'DUELIST', color: '#fa687e', sigil: '◈', skill: 'Siphon — 처치 시 체력을 흡수합니다.', ultimate: 'REDLINE — 다음 탄창 피해량 증가.' },
   { name: 'UMBRA', role: 'CONTROLLER', color: '#7599ff', sigil: '◐', skill: 'Veilstep — 시야를 가리는 연막을 생성합니다.', ultimate: 'NIGHT SHIFT — 잠시 은폐하고 재배치합니다.' },
 ];
-
-function OperatorFigure({ character, index, active }: { character: Character; index: number; active: boolean }) {
-  const root = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (!root.current) return;
-    const t = clock.getElapsedTime() + index * 0.8;
-    root.current.position.y = Math.sin(t * 1.2) * 0.035;
-    root.current.rotation.y = Math.sin(t * 0.45) * 0.05;
-  });
-  const dark = index === 4 ? '#171b2b' : index === 1 ? '#282339' : '#202a2d';
-  return <group ref={root} scale={active ? 1 : 0.84}>
-    <mesh position={[-0.2, 0.24, 0.04]} castShadow><boxGeometry args={[0.3, 0.4, 0.46]} /><meshStandardMaterial color="#151a1d" roughness={0.8} /></mesh>
-    <mesh position={[0.2, 0.24, 0.04]} castShadow><boxGeometry args={[0.3, 0.4, 0.46]} /><meshStandardMaterial color="#151a1d" roughness={0.8} /></mesh>
-    <mesh position={[-0.2, 0.82, 0]} castShadow><capsuleGeometry args={[0.14, 0.72, 4, 8]} /><meshStandardMaterial color={dark} roughness={0.85} /></mesh>
-    <mesh position={[0.2, 0.82, 0]} castShadow><capsuleGeometry args={[0.14, 0.72, 4, 8]} /><meshStandardMaterial color={dark} roughness={0.85} /></mesh>
-    <mesh position={[0, 1.34, 0]} castShadow><capsuleGeometry args={[0.34, 0.53, 5, 9]} /><meshStandardMaterial color={dark} roughness={0.72} /></mesh>
-    <mesh position={[0, 1.42, 0.28]} castShadow><boxGeometry args={[0.5, 0.46, 0.13]} /><meshStandardMaterial color={index === 2 ? '#6d5734' : '#394447'} metalness={0.22} roughness={0.54} /></mesh>
-    <mesh position={[0, 1.42, 0.355]}><boxGeometry args={[0.08, 0.54, 0.035]} /><meshStandardMaterial color={character.color} emissive={character.color} emissiveIntensity={0.6} /></mesh>
-    <mesh position={[-0.49, 1.56, 0]} castShadow><sphereGeometry args={[0.23, 10, 8]} /><meshStandardMaterial color={index === 2 ? '#b68745' : '#394447'} /></mesh>
-    <mesh position={[0.49, 1.56, 0]} castShadow><sphereGeometry args={[0.23, 10, 8]} /><meshStandardMaterial color={index === 2 ? '#b68745' : '#394447'} /></mesh>
-    <mesh position={[-0.56, 1.18, 0]} rotation={[0, 0, -0.12]} castShadow><capsuleGeometry args={[0.13, 0.55, 4, 7]} /><meshStandardMaterial color={dark} /></mesh>
-    <mesh position={[0.56, 1.18, 0]} rotation={[0, 0, 0.12]} castShadow><capsuleGeometry args={[0.13, 0.55, 4, 7]} /><meshStandardMaterial color={dark} /></mesh>
-    <mesh position={[0, 1.75, 0]}><cylinderGeometry args={[0.12, 0.14, 0.17, 8]} /><meshStandardMaterial color="#a77f6d" /></mesh>
-    <mesh position={[0, 2.02, 0]} castShadow><sphereGeometry args={[0.25, 12, 10]} /><meshStandardMaterial color={index === 2 ? '#b88468' : '#c79b83'} /></mesh>
-    <mesh position={[0, 2.04, 0.214]}><boxGeometry args={[0.37, 0.075, 0.045]} /><meshStandardMaterial color={character.color} emissive={character.color} emissiveIntensity={1} /></mesh>
-    <mesh position={[0, 2.25, -0.015]} castShadow>{index === 4 ? <coneGeometry args={[0.38, 0.58, 5]} /> : <sphereGeometry args={[0.285, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.48]} />}<meshStandardMaterial color={index === 0 ? '#d9e3df' : dark} roughness={0.74} side={THREE.DoubleSide} /></mesh>
-    <mesh position={[0, 1.43, -0.29]} castShadow><boxGeometry args={[0.43, 0.59, 0.2]} /><meshStandardMaterial color={index === 1 ? '#342d49' : '#2b3437'} /></mesh>
-    {index === 2 && <mesh position={[0.72, 1.58, -0.02]}><boxGeometry args={[0.28, 0.23, 0.25]} /><meshStandardMaterial color="#e0ad55" metalness={0.45} /></mesh>}
-    {index === 3 && <mesh position={[0.52, 1.79, 0]}><sphereGeometry args={[0.095, 8, 8]} /><meshStandardMaterial color={character.color} emissive={character.color} emissiveIntensity={1.3} /></mesh>}
-    <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}><circleGeometry args={[0.58, 20]} /><meshBasicMaterial color={character.color} transparent opacity={active ? 0.3 : 0.12} /></mesh>
-  </group>;
-}
 
 function OperatorStage({ selected }: { selected: number | null }) {
   return <div className="operator-stage" aria-label="오리지널 3D 오퍼레이터 라인업">
@@ -60,7 +21,7 @@ function OperatorStage({ selected }: { selected: number | null }) {
       <pointLight position={[0, 3, -3]} intensity={13} color="#ff536f" distance={12} /><pointLight position={[-5, 2, 1]} intensity={8} color="#625dff" distance={10} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.015, 0]} receiveShadow><planeGeometry args={[18, 12]} /><meshStandardMaterial color="#1a2227" metalness={0.35} roughness={0.48} /></mesh>
       <gridHelper args={[18, 36, '#56636b', '#303c43']} position={[0, 0.01, 0]} />
-      {characters.map((character, index) => <group key={character.name} position={[(index - 2) * 1.85, 0, 0]}><OperatorFigure character={character} index={index} active={selected === index} /></group>)}
+      {characters.map((character, index) => <group key={character.name} position={[(index - 2) * 1.85, 0, 0]}><OperatorModel operator={character} index={index} selected={selected === index} scale={0.88} /></group>)}
     </Canvas>
     <div className="stage-labels" aria-hidden="true">{characters.map((character, index) => <span className={selected === index ? 'stage-label active' : 'stage-label'} key={character.name} style={{ '--portrait-color': character.color } as React.CSSProperties}>{character.sigil} {character.name}</span>)}</div>
     <span className="stage-caption">ZZAP FIELD OPERATIVES // ORIGINAL 3D ROSTER</span>
