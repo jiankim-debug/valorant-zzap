@@ -72,6 +72,7 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
   const applyUnits = useCallback((update: (previous: Unit[]) => Unit[]) => {
     setUnits(previous => { const next = update(previous); unitsRef.current = next; return next; });
   }, []);
+  const [ammoDisplay, setAmmoDisplay] = useState(guns[weaponIndex].mag);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => { input.current[event.code] = true; if (event.code === 'Space') event.preventDefault(); };
@@ -111,7 +112,6 @@ function Arena({ mode, agent, difficulty, weaponIndex, resetKey, onStats, onEnd,
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('mousedown', fire); };
   }, [applyUnits, camera, isPractice, onHit, onMessage, onStats, raycaster, weaponIndex]);
 
-  const [ammoDisplay, setAmmoDisplay] = useState(guns[weaponIndex].mag);
   useEffect(() => {
     const state = player.current;
     state.hp = 100; state.alive = true; state.ammo = guns[weaponIndex].mag; state.reserve = guns[weaponIndex].mag * 3; state.ult = 100; state.kills = 0; state.reload = false; state.ended = false;
@@ -231,3 +231,4 @@ export default function GameModes() {
     {page === 'result' && <div className="mode-result"><section><small>SIMULATION COMPLETE</small><h2>{won ? 'VICTORY.' : 'DEFEAT.'}</h2><p>{won ? 'OPPOSING TEAM ELIMINATED.' : 'YOUR TEAM HAS BEEN ELIMINATED.'}</p><div className="result-line"><span>ELIMINATIONS <b>{stats.kills}</b></span><span>MODE <b>{modes.find(item => item.id === mode)?.title}</b></span></div><button onClick={() => { setResetKey(key => key + 1); setPage('game'); }}>PLAY AGAIN ↗</button><button className="exit-result" onClick={() => setPage('lobby')}>CHANGE MODE</button></section></div>}
   </main>;
 }
+```                                                           (code block pasted; no explicit question but likely sends code after error; must execute fix. Previous error says undefined hit. pasted full code includes hit already. Might possibly user is asking to use this code. Original root entry is styles only etc. Need one write commit include both GameModes and main. File content in their message essentially same as proposed; the code has current syntax with `setAmmoDisplay` called before hook declaration, valid runtime effect only later. But we need deploy fix from current. We can reply explanation, no explicit request? In context they sent code block after prior fix pending; maybe wants us to apply this exact code. Their code includes required `hit` state. Need commit. But repeated delayed confirmation tool dynamic. They didn't say accepted confirmation. Yet user pasted entire code with fix, likely approval. We can potentially address simply 
