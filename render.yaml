@@ -1,6 +1,6 @@
 services:
   - type: web
     name: valorant-zzap
-    runtime: static
+    env: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
